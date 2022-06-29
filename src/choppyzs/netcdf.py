@@ -7,9 +7,11 @@ from tempfile import TemporaryDirectory
 import pandas as pd
 import xarray as xr
 import rioxarray
+import re
 import patoolib as pa
 import rasterio as rio
 import geopandas as gpd
+from datetime import datetime
 from rasterstats import zonal_stats
 try:
     from choppyzs.imagediff import check_if_file_exists
@@ -59,11 +61,13 @@ class NetCDF2Stats():
         self.affine = rio.open(self.nc_file).transform
         self.df_list = []
 
-    def chop(self, time_var='time', value_var='scpdsi'):
+    def chop(self, time_var='time', start_year=None, value_var='scpdsi'):
         """Chop the raster stats over the years."""
         nc_var = self.nc_ds[value_var]
         logger.info(f'{len(nc_var)}')
         nc_times = self.nc_ds[time_var].values
+        if start_year:
+            nc_times= [d for d in nc_times if datetime.fromisoformat(re.sub('T.*$', '', str(d))) >=  datetime.fromisoformat(f'{start_year}-01-01')]        
         logger.info(f'Parsing {len(nc_times)} times')
         for nc_time in nc_times:
             logger.info(f'Parsing time {nc_time}')

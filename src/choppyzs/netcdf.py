@@ -8,6 +8,7 @@ import pandas as pd
 import xarray as xr
 import rioxarray
 import re
+import sys
 import patoolib as pa
 import rasterio as rio
 import geopandas as gpd
@@ -57,25 +58,36 @@ class NetCDF2Stats():
         else:
             self.geojson = False
         self.shape_df = gpd.read_file(self.shape_file)
-        self.nc_ds = xr.open_dataset(self.nc_file)
-        self.affine = rio.open(self.nc_file).transform
+        self.nc_ds = xr.open_dataset(self.nc_file, engine="rasterio")
+        self.nc_ds = self.nc_ds.rio.write_crs("epsg:4326", inplace=True)
+        #self.affine = rio.open(self.nc_file).transform
         self.df_list = []
 
-    def chop(self, time_var='time', start_year=None, value_var='scpdsi'):
+    def chop(self, time_var='time', start_year=None, time_range=None, value_var='scpdsi'):
         """Chop the raster stats over the years."""
         nc_var = self.nc_ds[value_var]
-        logger.info(f'{len(nc_var)}')
-        nc_times = self.nc_ds[time_var].values
+        logger.info(f'nc_var length: {value_var}:{len(nc_var)}')
+        org_nc_times = self.nc_ds[time_var].values
         if start_year:
-            nc_times= [d for d in nc_times if datetime.fromisoformat(re.sub('T.*$', '', str(d))) >=  datetime.fromisoformat(f'{start_year}-01-01')]        
-        logger.info(f'Parsing {len(nc_times)} times')
+            nc_times = [d for d in org_nc_times if datetime.fromisoformat(re.sub('T.*$', '', str(d))) >=  datetime.fromisoformat(f'{start_year}-01-01')]        
+        elif time_range: # e.go. 11-12
+            start_index, end_index = time_range.split('-')
+            nc_times = org_nc_times[int(start_index):int(end_index)] # select noon
+        else:
+            nc_times = org_nc_times
+        logger.info(f'Parsing {nc_times} out of {len(org_nc_times)} times')
+        
         for nc_time in nc_times:
             logger.info(f'Parsing time {nc_time}')
             nc_arr = nc_var.sel(time=nc_time)
-            nc_arr_values = nc_arr.values
+            logger.info(f'nc_arr length:{len(nc_arr)}')
+
+            nc_arr_values = nc_arr.squeeze().values
+
             stats_data = zonal_stats(self.shape_file,
-                                     nc_arr_values, affine=self.affine,
+                                     nc_arr_values, affine=nc_arr.rio.transform(),
                                      stats=self.statistics,
+                                     nodata=-999,
                                      geojson_out=self.geojson,
                                      all_touched=self.all_touched)
             sd = pd.DataFrame.from_dict(stats_data)

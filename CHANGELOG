@@ -4,3 +4,5 @@
     Updates to rasterpy image to include python bindings, specifically `gdal_merge.py`
 2022-06-29:
     Updates to chop netCDF file with selected start_year.
+2022-10-31:
+    Added support for index slicing and fixed affine transformation.
